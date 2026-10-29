@@ -150,6 +150,161 @@ pub fn is_valid_identifier(name: &str) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// Firebird type formatting
+// ---------------------------------------------------------------------------
+
+/// Maps RDB$FIELD_TYPE numbers to Firebird type names.
+/// Verified against RDB$FIELDS in Firebird 5.
+const FIREBIRD_TYPE_NAMES: [(i64, &str); 24] = [
+    (7, "SMALLINT"),
+    (8, "INTEGER"),
+    (9, "DATE"),
+    (10, "FLOAT"),
+    (11, "FLOAT"),
+    (12, "DATE"),
+    (13, "TIME"),
+    (14, "CHAR"),
+    (16, "BIGINT"),
+    (20, "VARCHAR"),
+    (23, "BOOLEAN"),
+    (24, "DECFLOAT(16)"),
+    (25, "DECFLOAT(34)"),
+    (26, "INT128"),
+    (27, "DOUBLE PRECISION"),
+    (29, "TIMESTAMP"),
+    (35, "TIMESTAMP"),
+    (37, "VARCHAR"),
+    (40, "CSTRING"),
+    (43, "NUMERIC"),
+    (45, "BLOB"),
+    (48, "NVARCHAR"),
+    (49, "BOOLEAN"),
+    (261, "BLOB"),
+];
+
+/// Looks up the Firebird type name for a raw `RDB$FIELD_TYPE` number.
+fn type_name_for(type_num: i64) -> Option<&'static str> {
+    FIREBIRD_TYPE_NAMES
+        .iter()
+        .find(|(n, _)| *n == type_num)
+        .map(|(_, name)| *name)
+}
+
+/// Returns a human-readable type description for a column, taking into
+/// account type number, sub-type, size (in bytes), precision, and scale.
+///
+/// For character types (CHAR, VARCHAR, NVARCHAR) the size is converted from
+/// bytes to characters (UTF8 = 4 bytes/char, NVARCHAR = 2 bytes/char).
+/// For NUMERIC/DECIMAL (identified by RDB$FIELD_SUB_TYPE), precision and
+/// scale are included.
+pub fn format_column_type(
+    type_num: i64,
+    sub_type: i64,
+    size: i64,
+    precision: i64,
+    scale: i64,
+) -> String {
+    if type_num == 0 {
+        return "UNKNOWN".to_string();
+    }
+    let mut type_name = match type_name_for(type_num) {
+        Some(n) => n.to_string(),
+        None => return format!("TYPE_{type_num}"),
+    };
+
+    // NUMERIC/DECIMAL detection via RDB$FIELD_SUB_TYPE.
+    // Sub-type 1 = NUMERIC, 2 = DECIMAL.
+    // NOTE: RDB$FIELD_SUB_TYPE is overloaded — for BLOB types (261) it means
+    // blob sub-type, so only apply this check to integer base types.
+    if (type_num == 7 || type_num == 8 || type_num == 16 || type_num == 26)
+        && (sub_type == 1 || sub_type == 2)
+    {
+        type_name = if sub_type == 1 {
+            "NUMERIC".to_string()
+        } else {
+            "DECIMAL".to_string()
+        };
+        if precision > 0 {
+            let scale_abs = scale.abs();
+            if scale_abs > 0 {
+                return format!("{type_name}({precision},{scale_abs})");
+            }
+            return format!("{type_name}({precision})");
+        }
+    }
+
+    // Add size info for character types
+    match type_name.as_str() {
+        "CHAR" | "VARCHAR" | "NVARCHAR" => {
+            let char_size = char_size_for(size, &type_name);
+            if char_size > 0 {
+                return format!("{type_name}({char_size})");
+            }
+        }
+        "BLOB" => {
+            // For BLOB types (type_num 261), RDB$FIELD_SUB_TYPE indicates the
+            // blob sub-type: 1 = TEXT, 2 = BINARY (per the Firebird docs and
+            // RDB$FIELDS). 0/other = generic BLOB.
+            if sub_type == 1 {
+                return "BLOB SUB_TYPE TEXT".to_string();
+            } else if sub_type == 2 {
+                return "BLOB SUB_TYPE BINARY".to_string();
+            }
+            return "BLOB".to_string();
+        }
+        _ => {}
+    }
+    type_name
+}
+
+/// Returns the character count for a given character type.
+///
+/// In Firebird, `RDB$FIELD_LENGTH` for CHAR/VARCHAR/NVARCHAR is already in
+/// **characters**, not bytes. The only exception is NVARCHAR, where the
+/// length is in 2-byte units (so divide by 2 to get characters).
+fn char_size_for(size: i64, type_name: &str) -> i64 {
+    if size <= 0 {
+        return 0;
+    }
+    match type_name {
+        "NVARCHAR" => size / 2,
+        _ => size, // CHAR, VARCHAR: already in characters
+    }
+}
+
+// ---------------------------------------------------------------------------
+// RDB$NULL_FLAG interpretation
+// ---------------------------------------------------------------------------
+
+/// Interprets `RDB$NULL_FLAG`: `1` = NOT NULL, `NULL`/`0` = nullable.
+///
+/// This is the single source of truth for NULL_FLAG semantics across the
+/// entire project. Use this instead of comparing the raw value inline.
+pub fn is_not_null(null_flag: Option<i64>) -> bool {
+    null_flag == Some(1)
+}
+
+// ---------------------------------------------------------------------------
+// RDB$TRIGGER_TYPE interpretation
+// ---------------------------------------------------------------------------
+
+/// Maps `RDB$TRIGGER_TYPE` to (timing, event) for DDL and display.
+///
+/// 1=BEFORE INSERT, 2=BEFORE UPDATE, 3=BEFORE DELETE,
+/// 4=AFTER INSERT, 5=AFTER UPDATE, 6=AFTER DELETE.
+pub fn trigger_type_label(trigger_type: i64) -> (&'static str, &'static str) {
+    match trigger_type {
+        1 => ("BEFORE", "INSERT"),
+        2 => ("BEFORE", "UPDATE"),
+        3 => ("BEFORE", "DELETE"),
+        4 => ("AFTER", "INSERT"),
+        5 => ("AFTER", "UPDATE"),
+        6 => ("AFTER", "DELETE"),
+        _ => ("BEFORE", "INSERT"),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Markdown cell rendering
 // ---------------------------------------------------------------------------
 
