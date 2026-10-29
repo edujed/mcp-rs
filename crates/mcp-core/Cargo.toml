@@ -1,0 +1,19 @@
+[package]
+name = "mcp-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+description = "MCP platform core: Firebird client, config, logging, paths, query execution"
+
+[dependencies]
+mcp-types = { workspace = true }
+rsfbclient = { workspace = true }
+rsfbclient-rust = { workspace = true }
+rsfbclient-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+dirs = { workspace = true }

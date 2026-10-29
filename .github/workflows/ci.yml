@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Check, fmt, clippy, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
+
+      # The workspace patches rsfbclient-rust to a vendored copy in the
+      # firebird-5-mcp repo (see [patch.crates-io] in Cargo.toml).
+      - name: Fetch vendored rsfbclient-rust
+        uses: actions/checkout@v4
+        with:
+          repository: edujed/firebird-5-mcp
+          path: vendor-src
+
+      - name: Point patch at vendored copy
+        run: |
+          sed -i "s|path = \"/home/edujed/github/firebird-5-mcp/vendor/rsfbclient-rust\"|path = \"vendor-src/vendor/rsfbclient-rust\"|" Cargo.toml
+          grep -A2 "patch.crates-io" Cargo.toml
+
+      - name: Check
+        run: cargo check --all-targets
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test

@@ -1,0 +1,20 @@
+[package]
+name = "mcp-transport"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+description = "MCP transport layer: stdio and HTTP+SSE servers, bearer auth, file endpoints"
+
+[dependencies]
+mcp-types = { workspace = true }
+mcp-core = { workspace = true }
+mcp-protocol = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+axum = { workspace = true }
+async-stream = { workspace = true }
+uuid = { workspace = true }

@@ -1,0 +1,16 @@
+[package]
+name = "mcp-protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+description = "Transport-agnostic MCP protocol core: JSON-RPC 2.0 routing, tool dispatch, events"
+
+[dependencies]
+mcp-types = { workspace = true }
+mcp-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }

@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ── Library workspace: no binaries to build. ──────────────────────
+  # The crates are consumed as source (path deps today, crates.io later),
+  # so the release job verifies the tag builds cleanly and publishes the
+  # GitHub Release with the changelog.
+  release:
+    name: Verify and publish release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
+
+      # The workspace patches rsfbclient-rust to a vendored copy in the
+      # firebird-5-mcp repo (see [patch.crates-io] in Cargo.toml).
+      - name: Fetch vendored rsfbclient-rust
+        uses: actions/checkout@v4
+        with:
+          repository: edujed/firebird-5-mcp
+          path: vendor-src
+
+      - name: Point patch at vendored copy
+        run: |
+          sed -i "s|path = \"/home/edujed/github/firebird-5-mcp/vendor/rsfbclient-rust\"|path = \"vendor-src/vendor/rsfbclient-rust\"|" Cargo.toml
+          grep -A2 "patch.crates-io" Cargo.toml
+
+      - name: Verify
+        run: |
+          cargo check --all-targets
+          cargo test
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          draft: false
+          prerelease: false

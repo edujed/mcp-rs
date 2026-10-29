@@ -1,0 +1,68 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/mcp-types",
+    "crates/mcp-core",
+    "crates/mcp-protocol",
+    "crates/mcp-transport",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+authors = ["Eduardo Jedliczka <edujed@gmail.com>"]
+repository = "https://github.com/edujed/mcp-rs"
+description = "Shared MCP platform in Rust: value types, Firebird access, JSON-RPC 2.0 protocol core, and stdio/SSE transports"
+homepage = "https://github.com/edujed/mcp-rs"
+documentation = "https://github.com/edujed/mcp-rs"
+readme = "README.md"
+keywords = ["mcp", "model-context-protocol", "firebird", "json-rpc", "sse"]
+categories = ["network-programming", "database", "development-tools"]
+
+[workspace.dependencies]
+# Internal crates
+mcp-types = { path = "crates/mcp-types" }
+mcp-core = { path = "crates/mcp-core" }
+mcp-protocol = { path = "crates/mcp-protocol" }
+mcp-transport = { path = "crates/mcp-transport" }
+
+# Firebird driver (pure-Rust)
+rsfbclient = { version = "0.29.0", default-features = false, features = ["pure_rust"] }
+rsfbclient-rust = "0.29.0"
+rsfbclient-core = "0.29.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Datas/horas
+chrono = "0.4"
+
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
+
+# HTTP server
+axum = { version = "0.7", features = ["macros", "multipart"] }
+async-stream = "0.3"
+uuid = { version = "1.0", features = ["v4"] }
+
+# Diretórios do usuário
+dirs = "6.0"
+
+# Parser de código Rust
+syn = { version = "2.0", features = ["full", "extra-traits"] }
+quote = "1.0"
+proc-macro2 = { version = "1.0", features = ["span-locations"] }
+
+[patch.crates-io]
+# Vendored copy that stops coercing NUMERIC/DECIMAL columns to f64.
+rsfbclient-rust = { path = "/home/edujed/github/firebird-5-mcp/vendor/rsfbclient-rust" }
+
+[profile.release]
+opt-level = 3
+codegen-units = 1
+lto = "fat"
+panic = "abort"
+strip = true
+debug = false
