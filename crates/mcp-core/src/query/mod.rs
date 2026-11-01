@@ -198,6 +198,23 @@ pub fn exec(client: &mut FirebirdClient, sql: &str) -> Result<usize, FbError> {
     }
 }
 
+/// Executes a parameterized DML statement (INSERT/UPDATE/DELETE) within an
+/// explicit read-write transaction and commits. Returns the affected row
+/// count.
+///
+/// Unlike [`exec`] (which interpolates values into the SQL text), this method
+/// binds values as prepared-statement parameters. The driver sends
+/// `SqlType::Text` values that exceed the inline data limit as BLOBs, so large
+/// text (e.g. a full source file) is not subject to the server's 16383-character
+/// string-literal cap.
+pub fn exec_with_params(
+    client: &mut FirebirdClient,
+    sql: &str,
+    params: Vec<SqlType>,
+) -> Result<usize, FbError> {
+    client.exec_with_params(sql, params)
+}
+
 /// Posts a Firebird event to the event manager.
 ///
 /// Executes `POST_EVENT '<event_name>'` within an explicit read-write

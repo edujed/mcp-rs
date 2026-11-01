@@ -80,40 +80,6 @@ struct MessageQuery {
     session_id: String,
 }
 
-/// Builds the axum router for the MCP SSE transport.
-///
-/// # Arguments
-/// * `core` — the protocol core (shared with the stdio transport).
-/// * `auth` — the authentication configuration (may be disabled).
-pub fn build_router(core: Arc<ProtocolCore>, auth: Arc<AuthConfig>) -> Router {
-    let state = SseState {
-        core,
-        sessions: Arc::new(Mutex::new(HashMap::new())),
-        auth,
-    };
-
-    Router::new()
-        .route(
-            "/sse",
-            get(|State(state): State<Arc<SseState>>, headers: HeaderMap| {
-                handle_sse(state, headers)
-            }),
-        )
-        .route(
-            "/messages",
-            post(
-                |State(state): State<Arc<SseState>>,
-                 headers: HeaderMap,
-                 query: Query<MessageQuery>,
-                 body: String| { handle_message(state, headers, query, body) },
-            ),
-        )
-        // Handle CORS preflight requests
-        .route("/sse", axum::routing::options(cors_preflight))
-        .route("/messages", axum::routing::options(cors_preflight))
-        .with_state(Arc::new(state))
-}
-
 /// Handles CORS preflight requests (OPTIONS).
 ///
 /// Echoes the requested headers from `Access-Control-Request-Headers` so the
@@ -337,13 +303,37 @@ pub async fn run_sse(
     auth: Arc<AuthConfig>,
     session_timeout_min: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let sessions = Arc::new(Mutex::new(HashMap::new()));
-    let router = build_router(core.clone(), auth.clone());
+    let state = Arc::new(SseState {
+        core: core.clone(),
+        sessions: Arc::new(Mutex::new(HashMap::new())),
+        auth: auth.clone(),
+    });
+
+    let router = Router::new()
+        .route(
+            "/sse",
+            get(|State(state): State<Arc<SseState>>, headers: HeaderMap| {
+                handle_sse(state, headers)
+            }),
+        )
+        .route(
+            "/messages",
+            post(
+                |State(state): State<Arc<SseState>>,
+                 headers: HeaderMap,
+                 query: Query<MessageQuery>,
+                 body: String| { handle_message(state, headers, query, body) },
+            ),
+        )
+        .route("/sse", axum::routing::options(cors_preflight))
+        .route("/messages", axum::routing::options(cors_preflight))
+        .with_state(state.clone());
+
     let files_router = files::build_files_router(core, auth);
 
     // Spawn the background session cleanup task.
     let timeout = Duration::from_secs(session_timeout_min * 60);
-    spawn_session_cleanup(sessions, timeout);
+    spawn_session_cleanup(state.sessions.clone(), timeout);
 
     let addr = format!("{host}:{port}");
     mlog!("MCP SSE server listening on {addr}");

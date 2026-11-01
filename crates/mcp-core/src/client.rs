@@ -206,6 +206,35 @@ impl FirebirdClient {
         Ok(())
     }
 
+    /// Executes a parameterized DML statement (INSERT/UPDATE/DELETE) within
+    /// an explicit read-write transaction and commits. Returns the affected
+    /// row count.
+    ///
+    /// Unlike [`crate::query::exec`] (which interpolates values into the SQL
+    /// text), this method binds values as prepared-statement parameters. The
+    /// driver sends `SqlType::Text` values that exceed the inline data limit
+    /// as BLOBs, so large text (e.g. a full source file) is not subject to the
+    /// server's 16383-character string-literal cap.
+    pub fn exec_with_params(
+        &mut self,
+        sql: &str,
+        params: Vec<rsfbclient_core::SqlType>,
+    ) -> Result<usize, FbError> {
+        use rsfbclient::Execute;
+        self.begin_rw_transaction()?;
+        let result = self.conn.execute(sql, params);
+        match result {
+            Ok(affected) => {
+                self.conn.commit()?;
+                Ok(affected)
+            }
+            Err(e) => {
+                let _ = self.conn.rollback();
+                Err(e)
+            }
+        }
+    }
+
     /// Begins an explicit read-write transaction on this connection.
     ///
     /// The connection is created with a read-only default transaction

@@ -21,5 +21,5 @@ pub mod sse;
 pub mod stdio;
 
 pub use auth::{AuthConfig, check_auth};
-pub use sse::{SseState, build_router, run_sse};
+pub use sse::{SseState, run_sse};
 pub use stdio::run_stdio;
